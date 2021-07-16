@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <title>TSP</title>
+    <link rel="shortcut icon" href="{{ url_for('static', filename='favicon.ico') }}" />
+    <link rel="stylesheet" href="../static/css/bootstrap.min.css" />
+    <link rel="stylesheet" href="../static/fontawesome-4.7/css/font-awesome.min.css" />
+    <link rel="stylesheet" href="../static/leaflet/leaflet.css" />
+    <link rel="stylesheet" href="../static/leaflet/routing-machine/leaflet-routing-machine.css" />
+    <link rel="stylesheet" href="../static/custom.css" />
+  </head>
+
+  <body>
+    <div class="container py-5">
+      <div class="row justify-content-center">
+        <div class="card border-dark col-10">
+          <div class="card-body">
+            <h3>Resuelve el TSP con Q-Learning</h3>
+            <p>
+              El Traveling Salesman problem trata de hallar la ruta óptima para pasar una vez por
+              todos los puntos de un mapa partiendo y finalizando en un punto origen.
+            </p>
+            <div id="mapid" style="height: 70vh; cursor: default"></div>
+            <div class="row justify-content-around">
+              <button class="btn btn-primary btn-block col-md-7 mt-2" onclick="sendMarkers()">
+                <i class="fa fa-map-o"></i> &nbsp; Obtener ruta
+              </button>
+              <button class="btn btn-danger btn-block col-md-4 mt-2" onclick="location.reload()">
+                <i class="fa fa-eraser"></i> &nbsp; Limpiar mapa
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </body>
+  <!-- Make sure you put this AFTER Leaflet's CSS -->
+  <script src="../static/leaflet/leaflet.js"></script>
+  <script src="../static/js/leaflet.motion.min.js"></script>
+  <script src="../static/leaflet/routing-machine/leaflet-routing-machine.min.js"></script>
+
+  <script>
+    // Set up map
+    let map = L.map("mapid").setView([-19.045, -65.26], 15)
+
+    let layer = L.tileLayer("http://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png", {
+      attribution:
+        '&copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors,' +
+        ' &copy; <a href="http://cartodb.com/attributions">CartoDB</a>',
+    })
+
+    map.addLayer(layer)
+
+    // Add markers
+    let markers = []
+
+    function onMapClick(e) {
+      let m = L.marker(e.latlng, { draggable: "false" })
+      m.addTo(map)
+      markers.push(m)
+    }
+
+    map.on("click", onMapClick)
+
+    // Send latitude and longitude of each marker to backend
+    function sendMarkers() {
+      if (markers.length > 1) {
+        const latLngList = markers.map(m => m._latlng)(async () => {
+          const response = await fetch("/api/solve", {
+            method: "POST",
+            body: JSON.stringify(latLngList),
+          })
+
+          // Draw solution on map
+          const solution = await response.json()
+
+          let ctrl = L.Routing.control({
+            waypoints: solution["ordered_points"],
+            lineOptions: {
+              styles: [{ className: "animate" }],
+            },
+            show: false,
+            routeWhileDragging: false,
+            createMarker: () => null,
+          })
+
+          ctrl.addTo(map)
+
+          // enumerate each point from solution
+          for (let i = 0; i < solution["ordered_points"].length - 1; i++) {
+            let content = `<span>${i}</span>`
+            // home icon for origin point
+            if (i === 0) {
+              content = `<span><i class="fa fa-home"></i></span>`
+            }
+
+            const popup = L.popup().setLatLng(solution["ordered_points"][i]).setContent(content)
+
+            popup.addTo(map)
+          }
+
+          // remove enumeration if new point is added
+          map.on("click", function () {
+            ctrl.remove()
+          })
+        })()
+      }
+    }
+  </script>
+</html>
